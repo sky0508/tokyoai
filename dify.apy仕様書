@@ -1,0 +1,756 @@
+---
+title: "テスト - Dify"
+source: "https://cloud.dify.ai/app/daa41129-a869-4c75-94c6-4bc13354b442/develop"
+author:
+published:
+created: 2025-09-02
+description:
+tags:
+  - "clippings"
+---
+## 高度なチャットアプリ API
+
+チャットアプリケーションはセッションの持続性をサポートしており、以前のチャット履歴を応答のコンテキストとして使用できます。これは、チャットボットやカスタマーサービス AI などに適用できます。
+
+### ベース URL
+
+### コード
+
+```
+https://api.dify.ai/v1
+```
+
+### 認証
+
+サービス API は `API-Key` 認証を使用します。 ***API キーはサーバー側に保存し、クライアント側で共有または保存しないことを強くお勧めします。API キーの漏洩は深刻な結果を招く可能性があります。***
+
+すべての API リクエストには、以下のように `Authorization` HTTP ヘッダーに API キーを含めてください：
+
+---
+
+POST /chat-messages
+
+## チャットメッセージを送信
+
+チャットアプリケーションにリクエストを送信します。
+
+### リクエストボディ
+
+- `query`
+	string
+	ユーザー入力/質問内容
+- `inputs`
+	object
+	アプリによって定義されたさまざまな変数値の入力を許可します。 `inputs` パラメータには複数のキー/値ペアが含まれ、各キーは特定の変数に対応し、各値はその変数の特定の値です。 変数がファイルタイプの場合、以下の `files` で説明されているキーを持つオブジェクトを指定します。 デフォルト `{}`
+- `response_mode`
+	string
+	応答の返却モードを指定します。サポートされているモード：
+	- `streaming` ストリーミングモード（推奨）、SSE（ [サーバー送信イベント](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events) ）を通じてタイプライターのような出力を実装します。
+	- `blocking` ブロッキングモード、実行完了後に結果を返します。（プロセスが長い場合、リクエストが中断される可能性があります） Cloudflareの制限により、リクエストは100秒後に返答なしで中断されます。
+- `user`
+	string
+	ユーザー識別子、エンドユーザーの身元を定義するために使用され、統計のために使用されます。 アプリケーション内で開発者によって一意に定義されるべきです。サービス API は WebApp によって作成された会話を共有しません。
+- `conversation_id`
+	string
+	会話ID、以前のチャット記録に基づいて会話を続けるには、以前のメッセージのconversation\_idを渡す必要があります。
+- `files`
+	array\[object\]
+	ファイルリスト、テキストの理解と質問への回答を組み合わせたファイルの入力に適しており、モデルがビジョン機能をサポートしている場合にのみ利用可能です。
+	- `type` (string) サポートされているタイプ：
+		- `document` ('TXT', 'MD', 'MARKDOWN', 'PDF', 'HTML', 'XLSX', 'XLS', 'DOCX', 'CSV', 'EML', 'MSG', 'PPTX', 'PPT', 'XML', 'EPUB')
+		- `image` ('JPG', 'JPEG', 'PNG', 'GIF', 'WEBP', 'SVG')
+		- `audio` ('MP3', 'M4A', 'WAV', 'WEBM', 'AMR')
+		- `video` ('MP4', 'MOV', 'MPEG', 'MPGA')
+		- `custom` (他のファイルタイプ)
+	- `transfer_method` (string) 転送方法、画像URLの場合は `remote_url` / ファイルアップロードの場合は `local_file`
+	- `url` (string) 画像URL（転送方法が `remote_url` の場合）
+	- `upload_file_id` (string) アップロードされたファイルID、事前にファイルアップロードAPIを通じて取得する必要があります（転送方法が `local_file` の場合）
+- `auto_generate_name`
+	bool
+	タイトルを自動生成、デフォルトは `true` 。 `false` に設定すると、会話のリネームAPIを呼び出し、 `auto_generate` を `true` に設定することで非同期タイトル生成を実現できます。
+- `workflow_id`
+	string
+	（オプション）ワークフローID、特定のバージョンを指定するために使用、提供されない場合はデフォルトの公開バージョンを使用。
+- `trace_id`
+	string
+	（オプション）トレースID。既存の業務システムのトレースコンポーネントと連携し、エンドツーエンドの分散トレーシングを実現するために使用します。指定がない場合、システムが自動的に trace\_id を生成します。以下の3つの方法で渡すことができ、優先順位は次のとおりです：  
+	- Header：HTTPヘッダー `X-Trace-Id` で渡す（最優先）。
+	- クエリパラメータ：URLクエリパラメータ `trace_id` で渡す。
+	- リクエストボディ：リクエストボディの `trace_id` フィールドで渡す（本フィールド）。
+
+### 応答
+
+response\_modeがブロッキングの場合、CompletionResponseオブジェクトを返します。 response\_modeがストリーミングの場合、ChunkCompletionResponseストリームを返します。
+
+### ChatCompletionResponse
+
+完全なアプリ結果を返します。 `Content-Type` は `application/json` です。
+
+- `event` (string) イベントタイプ、固定で `message`
+- `task_id` (string) タスクID、リクエスト追跡と以下のStop Generate APIに使用
+- `id` (string) ユニークID
+- `message_id` (string) 一意のメッセージID
+- `conversation_id` (string) 会話ID
+- `mode` (string) アプリモード、 `chat` として固定
+- `answer` (string) 完全な応答内容
+- `metadata` (object) メタデータ
+	- `usage` (Usage) モデル使用情報
+	- `retriever_resources` (array\[RetrieverResource\]) 引用と帰属リスト
+- `created_at` (int) メッセージ作成タイムスタンプ、例：1705395332
+
+### ChunkChatCompletionResponse
+
+アプリによって出力されたストリームチャンクを返します。 `Content-Type` は `text/event-stream` です。 各ストリーミングチャンクは `data:`で始まり、2つの改行文字 `\n\n` で区切られます。以下のように表示されます：
+
+ストリーミングチャンクの構造は `event` に応じて異なります：
+
+- `event: message` LLMがテキストチャンクイベントを返します。つまり、完全なテキストがチャンク形式で出力されます。
+	- `task_id` (string) タスクID、リクエスト追跡と以下のStop Generate APIに使用
+	- `message_id` (string) 一意のメッセージID
+	- `conversation_id` (string) 会話ID
+	- `answer` (string) LLMが返したテキストチャンク内容
+	- `created_at` (int) 作成タイムスタンプ、例：1705395332
+- `event: message_file` メッセージファイルイベント、ツールによって新しいファイルが作成されました
+	- `id` (string) ファイル一意ID
+	- `type` (string) ファイルタイプ、現在は"image"のみ許可
+	- `belongs_to` (string) 所属、ここでは'assistant'のみ
+	- `url` (string) ファイルのリモートURL
+	- `conversation_id` (string) 会話ID
+- `event: message_end` メッセージ終了イベント、このイベントを受信するとストリーミングが終了したことを意味します。
+	- `task_id` (string) タスクID、リクエスト追跡と以下のStop Generate APIに使用
+	- `message_id` (string) 一意のメッセージID
+	- `conversation_id` (string) 会話ID
+	- `metadata` (object) メタデータ
+		- `usage` (Usage) モデル使用情報
+		- `retriever_resources` (array\[RetrieverResource\]) 引用と帰属リスト
+- `event: tts_message` TTSオーディオストリームイベント、つまり音声合成出力。内容はMp3形式のオーディオブロックで、base64文字列としてエンコードされています。再生時には、base64をデコードしてプレーヤーに入力するだけです。（このメッセージは自動再生が有効な場合にのみ利用可能）
+	- `task_id` (string) タスクID、リクエスト追跡と以下のストップ応答インターフェースに使用
+	- `message_id` (string) 一意のメッセージID
+	- `audio` (string) 音声合成後のオーディオ、base64テキストコンテンツとしてエンコードされており、再生時にはbase64をデコードしてプレーヤーに入力するだけです
+	- `created_at` (int) 作成タイムスタンプ、例：1705395332
+- `event: tts_message_end` TTSオーディオストリーム終了イベント、このイベントを受信するとオーディオストリームが終了したことを示します。
+	- `task_id` (string) タスクID、リクエスト追跡と以下のストップ応答インターフェースに使用
+	- `message_id` (string) 一意のメッセージID
+	- `audio` (string) 終了イベントにはオーディオがないため、これは空の文字列です
+	- `created_at` (int) 作成タイムスタンプ、例：1705395332
+- `event: message_replace` メッセージ内容置換イベント。 出力内容のモデレーションが有効な場合、内容がフラグ付けされると、このイベントを通じてメッセージ内容がプリセットの返信に置き換えられます。
+	- `task_id` (string) タスクID、リクエスト追跡と以下のStop Generate APIに使用
+	- `message_id` (string) 一意のメッセージID
+	- `conversation_id` (string) 会話ID
+	- `answer` (string) 置換内容（すべてのLLM返信テキストを直接置き換えます）
+	- `created_at` (int) 作成タイムスタンプ、例：1705395332
+- `event: workflow_started` ワークフローが実行を開始
+	- `task_id` (string) タスクID、リクエスト追跡と以下のStop Generate APIに使用
+	- `workflow_run_id` (string) ワークフロー実行の一意ID
+	- `event` (string) `workflow_started` に固定
+	- `data` (object) 詳細
+		- `id` (string) ワークフロー実行の一意ID
+		- `workflow_id` (string) 関連ワークフローのID
+		- `created_at` (timestamp) 作成タイムスタンプ、例：1705395332
+- `event: node_started` ノード実行が開始
+	- `task_id` (string) タスクID、リクエスト追跡と以下のStop Generate APIに使用
+	- `workflow_run_id` (string) ワークフロー実行の一意ID
+	- `event` (string) `node_started` に固定
+	- `data` (object) 詳細
+		- `id` (string) ワークフロー実行の一意ID
+		- `node_id` (string) ノードのID
+		- `node_type` (string) ノードのタイプ
+		- `title` (string) ノードの名前
+		- `index` (int) 実行シーケンス番号、トレースノードシーケンスを表示するために使用
+		- `predecessor_node_id` (string) オプションのプレフィックスノードID、キャンバス表示実行パスに使用
+		- `inputs` (object) ノードで使用されるすべての前のノード変数の内容
+		- `created_at` (timestamp) 開始のタイムスタンプ、例：1705395332
+- `event: node_finished` ノード実行が終了、成功または失敗は同じイベント内で異なる状態で示されます
+	- `task_id` (string) タスクID、リクエスト追跡と以下のStop Generate APIに使用
+	- `workflow_run_id` (string) ワークフロー実行の一意ID
+	- `event` (string) `node_finished` に固定
+	- `data` (object) 詳細
+		- `id` (string) ワークフロー実行の一意ID
+		- `node_id` (string) ノードのID
+		- `node_type` (string) ノードのタイプ
+		- `title` (string) ノードの名前
+		- `index` (int) 実行シーケンス番号、トレースノードシーケンスを表示するために使用
+		- `predecessor_node_id` (string) オプションのプレフィックスノードID、キャンバス表示実行パスに使用
+		- `inputs` (object) ノードで使用されるすべての前のノード変数の内容
+		- `process_data` (json) オプションのノードプロセスデータ
+		- `outputs` (json) オプションの出力内容
+		- `status` (string) 実行の状態、 `running` / `succeeded` / `failed` / `stopped`
+		- `error` (string) オプションのエラー理由
+		- `elapsed_time` (float) オプションの使用される合計秒数
+		- `execution_metadata` (json) メタデータ
+			- `total_tokens` (int) オプションの使用されるトークン数
+			- `total_price` (decimal) オプションの合計コスト
+			- `currency` (string) オプション、例： `USD` / `RMB`
+		- `created_at` (timestamp) 開始のタイムスタンプ、例：1705395332
+- `event: workflow_finished` ワークフロー実行が終了、成功または失敗は同じイベント内で異なる状態で示されます
+	- `task_id` (string) タスクID、リクエスト追跡と以下のStop Generate APIに使用
+	- `workflow_run_id` (string) ワークフロー実行の一意ID
+	- `event` (string) `workflow_finished` に固定
+	- `data` (object) 詳細
+		- `id` (string) ワークフロー実行のID
+		- `workflow_id` (string) 関連ワークフローのID
+		- `status` (string) 実行の状態、 `running` / `succeeded` / `failed` / `stopped`
+		- `outputs` (json) オプションの出力内容
+		- `error` (string) オプションのエラー理由
+		- `elapsed_time` (float) オプションの使用される合計秒数
+		- `total_tokens` (int) オプションの使用されるトークン数
+		- `total_steps` (int) デフォルト0
+		- `created_at` (timestamp) 開始時間
+		- `finished_at` (timestamp) 終了時間
+- `event: error` ストリーミングプロセス中に発生する例外はストリームイベントの形式で出力され、エラーイベントを受信するとストリームが終了します。
+	- `task_id` (string) タスクID、リクエスト追跡と以下のStop Generate APIに使用
+	- `message_id` (string) 一意のメッセージID
+	- `status` (int) HTTPステータスコード
+	- `code` (string) エラーコード
+	- `message` (string) エラーメッセージ
+- `event: ping` 接続を維持するために10秒ごとにpingイベントが発生します。
+
+### エラー
+
+- 404, 会話が存在しません
+- 400, `invalid_param`, 異常なパラメータ入力
+- 400, `app_unavailable`, アプリ構成が利用できません
+- 400, `provider_not_initialize`, 利用可能なモデル資格情報構成がありません
+- 400, `provider_quota_exceeded`, モデル呼び出しクォータが不足しています
+- 400, `model_currently_not_support`, 現在のモデルが利用できません
+- 400, `workflow_not_found`, 指定されたワークフローバージョンが見つかりません
+- 400, `draft_workflow_error`, ドラフトワークフローバージョンは使用できません
+- 400, `workflow_id_format_error`, ワークフローID形式エラー、UUID形式が必要です
+- 400, `completion_request_error`, テキスト生成に失敗しました
+- 500, 内部サーバーエラー
+
+### ブロッキングモード
+
+### ストリーミングモード
+
+### 応答
+
+```
+data: {"event": "workflow_started", "task_id": "5ad4cb98-f0c7-4085-b384-88c403be6290", "workflow_run_id": "5ad498-f0c7-4085-b384-88cbe6290", "data": {"id": "5ad498-f0c7-4085-b384-88cbe6290", "workflow_id": "dfjasklfjdslag", "created_at": 1679586595}}
+  data: {"event": "node_started", "task_id": "5ad4cb98-f0c7-4085-b384-88c403be6290", "workflow_run_id": "5ad498-f0c7-4085-b384-88cbe6290", "data": {"id": "5ad498-f0c7-4085-b384-88cbe6290", "node_id": "dfjasklfjdslag", "node_type": "start", "title": "Start", "index": 0, "predecessor_node_id": "fdljewklfklgejlglsd", "inputs": {}, "created_at": 1679586595}}
+  data: {"event": "node_finished", "task_id": "5ad4cb98-f0c7-4085-b384-88c403be6290", "workflow_run_id": "5ad498-f0c7-4085-b384-88cbe6290", "data": {"id": "5ad498-f0c7-4085-b384-88cbe6290", "node_id": "dfjasklfjdslag", "node_type": "start", "title": "Start", "index": 0, "predecessor_node_id": "fdljewklfklgejlglsd", "inputs": {}, "outputs": {}, "status": "succeeded", "elapsed_time": 0.324, "execution_metadata": {"total_tokens": 63127864, "total_price": 2.378, "currency": "USD"},  "created_at": 1679586595}}
+  data: {"event": "workflow_finished", "task_id": "5ad4cb98-f0c7-4085-b384-88c403be6290", "workflow_run_id": "5ad498-f0c7-4085-b384-88cbe6290", "data": {"id": "5ad498-f0c7-4085-b384-88cbe6290", "workflow_id": "dfjasklfjdslag", "outputs": {}, "status": "succeeded", "elapsed_time": 0.324, "total_tokens": 63127864, "total_steps": "1", "created_at": 1679586595, "finished_at": 1679976595}}
+  data: {"event": "message", "message_id": "5ad4cb98-f0c7-4085-b384-88c403be6290", "conversation_id": "45701982-8118-4bc5-8e9b-64562b4555f2", "answer": " I", "created_at": 1679586595}
+  data: {"event": "message", "message_id": "5ad4cb98-f0c7-4085-b384-88c403be6290", "conversation_id": "45701982-8118-4bc5-8e9b-64562b4555f2", "answer": "'m", "created_at": 1679586595}
+  data: {"event": "message", "message_id": "5ad4cb98-f0c7-4085-b384-88c403be6290", "conversation_id": "45701982-8118-4bc5-8e9b-64562b4555f2", "answer": " glad", "created_at": 1679586595}
+  data: {"event": "message", "message_id": "5ad4cb98-f0c7-4085-b384-88c403be6290", "conversation_id": "45701982-8118-4bc5-8e9b-64562b4555f2", "answer": " to", "created_at": 1679586595}
+  data: {"event": "message", "message_id" : "5ad4cb98-f0c7-4085-b384-88c403be6290", "conversation_id": "45701982-8118-4bc5-8e9b-64562b4555f2", "answer": " meet", "created_at": 1679586595}
+  data: {"event": "message", "message_id" : "5ad4cb98-f0c7-4085-b384-88c403be6290", "conversation_id": "45701982-8118-4bc5-8e9b-64562b4555f2", "answer": " you", "created_at": 1679586595}
+  data: {"event": "message_end", "id": "5e52ce04-874b-4d27-9045-b3bc80def685", "conversation_id": "45701982-8118-4bc5-8e9b-64562b4555f2", "metadata": {"usage": {"prompt_tokens": 1033, "prompt_unit_price": "0.001", "prompt_price_unit": "0.001", "prompt_price": "0.0010330", "completion_tokens": 135, "completion_unit_price": "0.002", "completion_price_unit": "0.001", "completion_price": "0.0002700", "total_tokens": 1168, "total_price": "0.0013030", "currency": "USD", "latency": 1.381760165997548}, "retriever_resources": [{"position": 1, "dataset_id": "101b4c97-fc2e-463c-90b1-5261a4cdcafb", "dataset_name": "iPhone", "document_id": "8dd1ad74-0b5f-4175-b735-7d98bbbb4e00", "document_name": "iPhone List", "segment_id": "ed599c7f-2766-4294-9d1d-e5235a61270a", "score": 0.98457545, "content": "\"Model\",\"Release Date\",\"Display Size\",\"Resolution\",\"Processor\",\"RAM\",\"Storage\",\"Camera\",\"Battery\",\"Operating System\"\n\"iPhone 13 Pro Max\",\"September 24, 2021\",\"6.7 inch\",\"1284 x 2778\",\"Hexa-core (2x3.23 GHz Avalanche + 4x1.82 GHz Blizzard)\",\"6 GB\",\"128, 256, 512 GB, 1TB\",\"12 MP\",\"4352 mAh\",\"iOS 15\""}]}}
+  data: {"event": "tts_message", "conversation_id": "23dd85f3-1a41-4ea0-b7a9-062734ccfaf9", "message_id": "a8bdc41c-13b2-4c18-bfd9-054b9803038c", "created_at": 1721205487, "task_id": "3bf8a0bb-e73b-4690-9e66-4e429bad8ee7", "audio": "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"}
+  data: {"event": "tts_message_end", "conversation_id": "23dd85f3-1a41-4ea0-b7a9-062734ccfaf9", "message_id": "a8bdc41c-13b2-4c18-bfd9-054b9803038c", "created_at": 1721205487, "task_id": "3bf8a0bb-e73b-4690-9e66-4e429bad8ee7", "audio": ""}
+```
+
+---
+
+POST /files/upload
+
+## ファイルアップロード
+
+メッセージ送信時に使用するファイルをアップロードし、画像とテキストのマルチモーダル理解を可能にします。 アプリケーションでサポートされている形式をサポートします。 アップロードされたファイルは現在のエンドユーザーのみが使用できます。
+
+### リクエストボディ
+
+このインターフェースは `multipart/form-data` リクエストを必要とします。
+
+- `file` (File) 必須 アップロードするファイル。
+- `user` (string) 必須 ユーザー識別子、開発者のルールによって定義され、アプリケーション内で一意でなければなりません。サービス API は WebApp によって作成された会話を共有しません。
+
+### 応答
+
+アップロードが成功すると、サーバーはファイルの ID と関連情報を返します。
+
+- `id` (uuid) ID
+- `name` (string) ファイル名
+- `size` (int) ファイルサイズ（バイト）
+- `extension` (string) ファイル拡張子
+- `mime_type` (string) ファイルの MIME タイプ
+- `created_by` (uuid) エンドユーザーID
+- `created_at` (timestamp) 作成タイムスタンプ、例：1705395332
+
+### エラー
+
+- 400, `no_file_uploaded`, ファイルが提供されなければなりません
+- 400, `too_many_files`, 現在は 1 つのファイルのみ受け付けます
+- 400, `unsupported_preview`, ファイルはプレビューをサポートしていません
+- 400, `unsupported_estimate`, ファイルは推定をサポートしていません
+- 413, `file_too_large`, ファイルが大きすぎます
+- 415, `unsupported_file_type`, サポートされていない拡張子、現在はドキュメントファイルのみ受け付けます
+- 503, `s3_connection_failed`, S3 サービスに接続できません
+- 503, `s3_permission_denied`, S3 にファイルをアップロードする権限がありません
+- 503, `s3_file_too_large`, ファイルが S3 のサイズ制限を超えています
+- 500, 内部サーバーエラー
+
+---
+
+GET /files/:file\_id/preview
+
+## ファイルプレビュー
+
+アップロードされたファイルをプレビューまたはダウンロードします。このエンドポイントを使用すると、以前にファイルアップロード API でアップロードされたファイルにアクセスできます。
+
+*ファイルは、リクエストしているアプリケーションのメッセージ範囲内にある場合のみアクセス可能です。*
+
+### パスパラメータ
+
+- `file_id` (string) 必須 プレビューするファイルの一意識別子。ファイルアップロード API レスポンスから取得します。
+
+### クエリパラメータ
+
+- `as_attachment` (boolean) オプション ファイルを添付ファイルとして強制ダウンロードするかどうか。デフォルトは `false` （ブラウザでプレビュー）。
+
+### レスポンス
+
+ブラウザ表示またはダウンロード用の適切なヘッダー付きでファイル内容を返します。
+
+- `Content-Type` ファイル MIME タイプに基づいて設定
+- `Content-Length` ファイルサイズ（バイト、利用可能な場合）
+- `Content-Disposition` `as_attachment=true` の場合は "attachment" に設定
+- `Cache-Control` パフォーマンス向上のためのキャッシュヘッダー
+- `Accept-Ranges` 音声/動画ファイルの場合は "bytes" に設定
+
+### エラー
+
+- 400, `invalid_param`, パラメータ入力異常
+- 403, `file_access_denied`, ファイルアクセス拒否またはファイルが現在のアプリケーションに属していません
+- 404, `file_not_found`, ファイルが見つからないか削除されています
+- 500, サーバー内部エラー
+
+---
+
+POST /chat-messages/:task\_id/stop
+
+## 生成を停止
+
+ストリーミングモードでのみサポートされています。
+
+### パス
+
+- `task_id` (string) タスク ID、ストリーミングチャンクの返り値から取得できます
+
+### リクエストボディ
+
+- `user` (string) 必須 ユーザー識別子、エンドユーザーの身元を定義するために使用され、送信メッセージインターフェースで渡されたユーザーと一致している必要があります。サービス API は WebApp によって作成された会話を共有しません。
+
+### 応答
+
+- `result` (string) 常に"success"を返します
+
+### リクエスト例
+
+### 応答例
+
+---
+
+POST /messages/:message\_id/feedbacks
+
+## メッセージフィードバック
+
+エンドユーザーはフィードバックメッセージを提供でき、アプリケーション開発者が期待される出力を最適化するのを支援します。
+
+### パス
+
+- `message_id`
+	string
+	メッセージID
+
+### リクエストボディ
+
+- `rating`
+	string
+	アップボートは `like` 、ダウンボートは `dislike` 、アップボートの取り消しは `null`
+- `user`
+	string
+	ユーザー識別子、開発者のルールによって定義され、アプリケーション内で一意でなければなりません。
+- `content`
+	string
+	メッセージのフィードバックです。
+
+### 応答
+
+- `result` (string) 常に"success"を返します
+
+---
+
+GET /app/feedbacks
+
+## アプリのメッセージの「いいね」とフィードバックを取得
+
+アプリのエンドユーザーからのフィードバックや「いいね」を取得します。
+
+### クエリ
+
+- `page`
+	string
+	（任意）ページ番号。デフォルト値：1
+
+- `limit`
+	string
+	（任意）1ページあたりの件数。デフォルト値：20
+
+### レスポンス
+
+- `data` (リスト) このアプリの「いいね」とフィードバックの一覧を返します。
+
+---
+
+GET /messages/{message\_id}/suggested
+
+## 次の推奨質問
+
+---
+
+GET /messages
+
+## 会話履歴メッセージを取得
+
+スクロールロード形式で履歴チャット記録を返し、最初のページは最新の `{limit}` メッセージを返します。つまり、逆順です。
+
+### クエリ
+
+- `conversation_id`
+	string
+	会話ID
+- `user`
+	string
+	ユーザー識別子、エンドユーザーの身元を定義するために使用され、統計のために使用されます。 アプリケーション内で開発者によって一意に定義されるべきです。
+- `first_id`
+	string
+	現在のページの最初のチャット記録のID、デフォルトはnullです。
+- `limit`
+	int
+	1回のリクエストで返すチャット履歴メッセージの数、デフォルトは20です。
+
+### 応答
+
+- `data` (array\[object\]) メッセージリスト
+	- `id` (string) メッセージID
+	- `conversation_id` (string) 会話ID
+	- `inputs` (object) ユーザー入力パラメータ。
+	- `query` (string) ユーザー入力/質問内容。
+	- `message_files` (array\[object\]) メッセージファイル
+		- `id` (string) ID
+		- `type` (string) ファイルタイプ、画像の場合はimage
+		- `url` (string) ファイルプレビューURL、ファイルアクセスにはファイルプレビューAPI（ `/files/{file_id}/preview` ）を使用してください
+		- `belongs_to` (string) 所属、userまたはassistant
+	- `answer` (string) 応答メッセージ内容
+	- `created_at` (timestamp) 作成タイムスタンプ、例：1705395332
+	- `feedback` (object) フィードバック情報
+		- `rating` (string) アップボートは `like` / ダウンボートは `dislike`
+	- `retriever_resources` (array\[RetrieverResource\]) 引用と帰属リスト
+- `has_more` (bool) 次のページがあるかどうか
+- `limit` (int) 返された項目数、入力がシステム制限を超える場合、システム制限数を返します
+
+### 応答例
+
+---
+
+GET /conversations
+
+## 会話を取得
+
+現在のユーザーの会話リストを取得し、デフォルトで最新の 20 件を返します。
+
+### クエリ
+
+- `user`
+	string
+	ユーザー識別子、エンドユーザーの身元を定義するために使用され、統計のために使用されます。 アプリケーション内で開発者によって一意に定義されるべきです。
+- `last_id`
+	string
+	(Optional)現在のページの最後の記録のID、デフォルトはnullです。
+- `limit`
+	int
+	(Optional)1回のリクエストで返す記録の数、デフォルトは最新の20件です。最大100、最小1。
+- `sort_by`
+	string
+	(Optional)ソートフィールド、デフォルト：-updated\_at（更新時間で降順にソート）
+	- 利用可能な値：created\_at, -created\_at, updated\_at, -updated\_at
+	- フィールドの前の記号は順序または逆順を表し、"-"は逆順を表します。
+
+### 応答
+
+- `data` (array\[object\]) 会話のリスト
+	- `id` (string) 会話ID
+	- `name` (string) 会話名、デフォルトではLLMによって生成されます。
+	- `inputs` (object) ユーザー入力パラメータ。
+	- `introduction` (string) 紹介
+	- `created_at` (timestamp) 作成タイムスタンプ、例：1705395332
+	- `updated_at` (timestamp) 更新タイムスタンプ、例：1705395332
+- `has_more` (bool)
+- `limit` (int) 返されたエントリ数、入力がシステム制限を超える場合、システム制限数が返されます
+
+---
+
+DELETE /conversations/:conversation\_id
+
+## 会話を削除
+
+---
+
+POST /conversations/:conversation\_id/name
+
+## 会話の名前を変更
+
+### リクエストボディ
+
+セッションの名前を変更します。セッション名は、複数のセッションをサポートするクライアントでの表示に使用されます。
+
+### パス
+
+- `conversation_id` (string) 会話ID
+
+- `name`
+	string
+	(Optional)会話の名前。 `auto_generate` が `true` に設定されている場合、このパラメータは省略できます。
+- `auto_generate`
+	bool
+	(Optional)タイトルを自動生成、デフォルトは `false`
+- `user`
+	string
+	ユーザー識別子、開発者によって定義され、アプリケーション内で一意であることを保証しなければなりません。
+
+### 応答
+
+- `id` (string) 会話ID
+- `name` (string) 会話名
+- `inputs` (object) ユーザー入力パラメータ
+- `status` (string) 会話状態
+- `introduction` (string) 紹介
+- `created_at` (timestamp) 作成タイムスタンプ、例：1705395332
+- `updated_at` (timestamp) 更新タイムスタンプ、例：1705395332
+
+---
+
+GET /conversations/:conversation\_id/variables
+
+## 会話変数の取得
+
+特定の会話から変数を取得します。このエンドポイントは、会話中に取得された構造化データを抽出するのに役立ちます。
+
+### パスパラメータ
+
+- `conversation_id`
+	string
+	変数を取得する会話のID。
+
+### クエリパラメータ
+
+- `user`
+	string
+	ユーザー識別子。開発者によって定義されたルールに従い、アプリケーション内で一意である必要があります。
+- `last_id`
+	string
+	(Optional)現在のページの最後の記録のID、デフォルトはnullです。
+- `limit`
+	int
+	(Optional)1回のリクエストで返す記録の数、デフォルトは最新の20件です。最大100、最小1。
+
+### レスポンス
+
+- `limit` (int) ページごとのアイテム数
+- `has_more` (bool) さらにアイテムがあるかどうか
+- `data` (array\[object\]) 変数のリスト
+	- `id` (string) 変数 ID
+	- `name` (string) 変数名
+	- `value_type` (string) 変数タイプ（文字列、数値、真偽値など）
+	- `value` (string) 変数値
+	- `description` (string) 変数の説明
+	- `created_at` (int) 作成タイムスタンプ
+	- `updated_at` (int) 最終更新タイムスタンプ
+
+### エラー
+
+- 404, `conversation_not_exists`, 会話が見つかりません
+
+---
+
+PUT /conversations/:conversation\_id/variables/:variable\_id
+
+## 会話変数の更新
+
+特定の会話変数の値を更新します。このエンドポイントは、名前、型、説明を保持しながら、会話中にキャプチャされた変数の値を変更することを可能にします。
+
+### パスパラメータ
+
+- `conversation_id`
+	string
+	更新する変数を含む会話のID。
+- `variable_id`
+	string
+	更新する変数のID。
+
+### リクエストボディ
+
+- `value`
+	any
+	変数の新しい値。変数の期待される型（文字列、数値、オブジェクトなど）と一致する必要があります。
+- `user`
+	string
+	ユーザー識別子。開発者によって定義されたルールに従い、アプリケーション内で一意である必要があります。
+
+### レスポンス
+
+以下を含む更新された変数オブジェクトを返します：
+
+- `id` (string) 変数ID
+- `name` (string) 変数名
+- `value_type` (string) 変数型（文字列、数値、オブジェクトなど）
+- `value` (any) 更新された変数値
+- `description` (string) 変数の説明
+- `created_at` (int) 作成タイムスタンプ
+- `updated_at` (int) 最終更新タイムスタンプ
+
+### エラー
+
+- 400, `Type mismatch: variable expects {expected_type}, but got {actual_type} type`, 値の型が変数の期待される型と一致しません
+- 404, `conversation_not_exists`, 会話が見つかりません
+- 404, `conversation_variable_not_exists`, 変数が見つかりません
+
+---
+
+POST /audio-to-text
+
+## 音声からテキストへ
+
+---
+
+POST /text-to-audio
+
+## テキストから音声へ
+
+---
+
+GET /info
+
+## アプリケーションの基本情報を取得
+
+このアプリケーションの基本情報を取得するために使用されます
+
+### Response
+
+- `name` (string) アプリケーションの名前
+- `description` (string) アプリケーションの説明
+- `tags` (array\[string\]) アプリケーションのタグ
+- `mode` (string) アプリケーションのモード
+- `author_name` (string) 作者の名前
+
+---
+
+GET /parameters
+
+## アプリケーションのパラメータ情報を取得
+
+ページに入る際に、機能、入力パラメータ名、タイプ、デフォルト値などの情報を取得するために使用されます。
+
+### 応答
+
+- `opening_statement` (string) 開始の挨拶
+- `suggested_questions` (array\[string\]) 開始時の推奨質問のリスト
+- `suggested_questions_after_answer` (object) 答えを有効にした後の質問を提案します。
+	- `enabled` (bool) 有効かどうか
+- `speech_to_text` (object) 音声からテキストへ
+	- `enabled` (bool) 有効かどうか
+- `text_to_speech` (object) テキストから音声へ
+	- `enabled` (bool) 有効かどうか
+	- `voice` (string) 音声タイプ
+	- `language` (string) 言語
+	- `autoPlay` (string) 自動再生
+		- `enabled` 有効
+		- `disabled` 無効
+- `retriever_resource` (object) 引用と帰属
+	- `enabled` (bool) 有効かどうか
+- `annotation_reply` (object) 注釈返信
+	- `enabled` (bool) 有効かどうか
+- `user_input_form` (array\[object\]) ユーザー入力フォームの設定
+	- `text-input` (object) テキスト入力コントロール
+		- `label` (string) 変数表示ラベル名
+		- `variable` (string) 変数ID
+		- `required` (bool) 必須かどうか
+		- `default` (string) デフォルト値
+	- `paragraph` (object) 段落テキスト入力コントロール
+		- `label` (string) 変数表示ラベル名
+		- `variable` (string) 変数ID
+		- `required` (bool) 必須かどうか
+		- `default` (string) デフォルト値
+	- `select` (object) ドロップダウンコントロール
+		- `label` (string) 変数表示ラベル名
+		- `variable` (string) 変数ID
+		- `required` (bool) 必須かどうか
+		- `default` (string) デフォルト値
+		- `options` (array\[string\]) オプション値
+- `file_upload` (object) ファイルアップロード設定
+	- `document` (object) ドキュメント設定  
+		現在サポートされているドキュメントタイプ： `txt`, `md`, `markdown`, `pdf`, `html`, `xlsx`, `xls`, `docx`, `csv`, `eml`, `msg`, `pptx`, `ppt`, `xml`, `epub` 。
+		- `enabled` (bool) 有効かどうか
+		- `number_limits` (int) ドキュメント数の上限。デフォルトは 3
+		- `transfer_methods` (array\[string\]) 転送方法リスト： `remote_url`, `local_file` 。いずれかを選択する必要があります。
+	- `image` (object) 画像設定  
+		現在サポートされている画像タイプ： `png`, `jpg`, `jpeg`, `webp`, `gif` 。
+		- `enabled` (bool) 有効かどうか
+		- `number_limits` (int) 画像数の上限。デフォルトは 3
+		- `transfer_methods` (array\[string\]) 転送方法リスト： `remote_url`, `local_file` 。いずれかを選択する必要があります。
+	- `audio` (object) オーディオ設定  
+		現在サポートされているオーディオタイプ： `mp3`, `m4a`, `wav`, `webm`, `amr` 。
+		- `enabled` (bool) 有効かどうか
+		- `number_limits` (int) オーディオ数の上限。デフォルトは 3
+		- `transfer_methods` (array\[string\]) 転送方法リスト： `remote_url`, `local_file` 。いずれかを選択する必要があります。
+	- `video` (object) ビデオ設定  
+		現在サポートされているビデオタイプ： `mp4`, `mov`, `mpeg`, `mpga` 。
+		- `enabled` (bool) 有効かどうか
+		- `number_limits` (int) ビデオ数の上限。デフォルトは 3
+		- `transfer_methods` (array\[string\]) 転送方法リスト： `remote_url`, `local_file` 。いずれかを選択する必要があります。
+	- `custom` (object) カスタム設定
+		- `enabled` (bool) 有効かどうか
+		- `number_limits` (int) カスタム数の上限。デフォルトは 3
+		- `transfer_methods` (array\[string\]) 転送方法リスト： `remote_url`, `local_file` 。いずれかを選択する必要があります。
+- `system_parameters` (object) システムパラメータ
+	- `file_size_limit` (int) ドキュメントアップロードサイズ制限（MB）
+	- `image_file_size_limit` (int) 画像ファイルアップロードサイズ制限（MB）
+	- `audio_file_size_limit` (int) オーディオファイルアップロードサイズ制限（MB）
+	- `video_file_size_limit` (int) ビデオファイルアップロードサイズ制限（MB）
+
+---
+
+GET /meta
+
+## アプリケーションのメタ情報を取得
+
+このアプリケーションのツールのアイコンを取得するために使用されます
+
+### 応答
+
+- `tool_icons` (object\[string\]) ツールアイコン
+	- `tool_name` (string)
+		- `icon` (object|string)
+			- (object) アイコンオブジェクト
+				- `background` (string) 背景色（16 進数形式）
+				- `content` (string) 絵文字
+			- (string) アイコンの URL
+
+---
+
+GET /site
+
+## アプリのWebApp設定を取得
+
+アプリの WebApp 設定を取得するために使用します。
+
+### 応答
+
+- `title` (string) WebApp 名
+- `chat_color_theme` (string) チャットの色テーマ、16 進数形式
+- `chat_color_theme_inverted` (bool) チャットの色テーマを反転するかどうか
+- `icon_type` (string) アイコンタイプ、 `emoji` -絵文字、 `image` -画像
+- `icon` (string) アイコン。 `emoji` タイプの場合は絵文字、 `image` タイプの場合は画像 URL
+- `icon_background` (string) 16 進数形式の背景色
+- `icon_url` (string) アイコンの URL
+- `description` (string) 説明
+- `copyright` (string) 著作権情報
+- `privacy_policy` (string) プライバシーポリシーのリンク
+- `custom_disclaimer` (string) カスタム免責事項
+- `default_language` (string) デフォルト言語
+- `show_workflow_steps` (bool) ワークフローの詳細を表示するかどうか
+- `use_icon_as_answer_icon` (bool) WebApp のアイコンをチャット内の🤖に置き換えるかどうか
+
+---
